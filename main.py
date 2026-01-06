@@ -16,7 +16,7 @@ from core.agents import DefenseEvasionSystem, IntraQuestionWeightAdjuster
 from core.prompts import PROGRESSIVE_FEW_SHOT
 from core.datatypes import ScoreResult
 
-MAX_WORKERS = 3
+MAX_WORKERS = 1
 print_lock = threading.Lock()
 file_lock = threading.Lock()
 global_stats_lock = threading.Lock()
@@ -70,7 +70,6 @@ def multi_agent_attack(goal, max_rounds=5, goal_idx=0):
     round_results = []
     attack_history = []
     success = False
-    # 已移除StrongRejectScore相关内容
     first_round_success = False
     weight_adjuster = IntraQuestionWeightAdjuster()
     for round_idx in range(max_rounds):
@@ -96,7 +95,6 @@ def multi_agent_attack(goal, max_rounds=5, goal_idx=0):
                 first_round_success = True
                 with print_lock:
                     print(f"🎯 [ID:{goal_idx}] First-round success!")
-            # 已移除StrongRejectScore相关内容
             break
         elif label is None:
             with print_lock:
@@ -133,7 +131,7 @@ def multi_agent_attack(goal, max_rounds=5, goal_idx=0):
         else:
             with print_lock:
                 print(f"⏰ [ID:{goal_idx}] Reached maximum rounds ({max_rounds}), ending attack")
-    return messages, round_results, success, score_result, attack_history, first_round_success
+    return messages, round_results, success, attack_history, first_round_success
 
 def process_goal_with_retry(goal, goal_idx, total_count, max_retries=2, retry_delay=5):
     for attempt in range(max_retries):
@@ -266,7 +264,6 @@ if __name__ == "__main__":
                             processed_result["attack_history"],
                             ensure_ascii=False
                         )
-                    # 已移除StrongRejectScore相关内容
                     result.update({
                         "score": None,
                         "refusal": None,
@@ -298,7 +295,6 @@ if __name__ == "__main__":
                         print(f"  Processed New: {current_processed}/{remaining_count}")
                         print(f"  Success: {current_success} ({success_rate:.1f}%)")
                         print(f"  This attempt time: {processed_result['elapsed_time']:.1f} seconds")
-                        # 已移除全局策略学习相关内容
                         print(f"{'='*60}")
                 else:
                     with print_lock:
