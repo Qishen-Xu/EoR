@@ -13,11 +13,9 @@ from core.api import (
     call_model_with_retry, call_analyst_model_with_retry, call_attacker_model_with_retry, llama_guard3_check_with_retry
 )
 from core.agents import DefenseEvasionSystem, IntraQuestionWeightAdjuster
- # 已移除全局策略学习相关内容
 from core.prompts import PROGRESSIVE_FEW_SHOT
 from core.datatypes import ScoreResult
 
-# ==================== 全局变量与锁 ====================
 MAX_WORKERS = 3
 print_lock = threading.Lock()
 file_lock = threading.Lock()
@@ -29,9 +27,7 @@ output_csv = f"{ATTACKER_MODEL_NAME.replace('/', '_')}_explication_attack_{model
 global_rate_limiter = RateLimiter(max_calls_per_second=1.5)
 adaptive_retry = AdaptiveRetry()
 evasion_system = DefenseEvasionSystem()
- # 已移除全局策略学习相关内容
 
-# ==================== 智能体主流程 ====================
 def call_analyst_agent_with_retry(messages, attack_history, weight_adjuster, max_retries=2):
     api_name = "analyst_agent"
     max_retries, base_delay = adaptive_retry.get_retry_params(api_name)
@@ -68,37 +64,13 @@ def call_attacker_agent_with_retry(analyst_suggestion, messages, max_retries=2):
             adaptive_retry.record_failure(api_name)
     return None
 
-def call_strong_reject_evaluator_with_retry(goal, reply, max_retries=2, retry_delay=3):
-    for attempt in range(max_retries):
-        global_rate_limiter.wait()
-        try:
-            from StrongRejectScore import StrongREJECTEvaluator
-            evaluator = StrongREJECTEvaluator(
-                api_url=TARGET_API_URL,
-                api_key=TARGET_API_KEY,
-                model="deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
-                timeout=60
-            )
-            score_result = evaluator.evaluate(goal, reply)
-            with print_lock:
-                print(f"Evaluation results: score={score_result.score}, refusal={score_result.refusal}")
-            return score_result
-        except Exception as e:
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay * (attempt + 1))
-                continue
-            else:
-                with print_lock:
-                    print(f"Evaluator call failed: {e}")
-                return None
-    return None
 
 def multi_agent_attack(goal, max_rounds=5, goal_idx=0):
     messages = [{"role": "user", "content": goal}]
     round_results = []
     attack_history = []
     success = False
-    score_result = None
+    # 已移除StrongRejectScore相关内容
     first_round_success = False
     weight_adjuster = IntraQuestionWeightAdjuster()
     for round_idx in range(max_rounds):
@@ -124,7 +96,7 @@ def multi_agent_attack(goal, max_rounds=5, goal_idx=0):
                 first_round_success = True
                 with print_lock:
                     print(f"🎯 [ID:{goal_idx}] First-round success!")
-            score_result = call_strong_reject_evaluator_with_retry(goal, reply, max_retries=2, retry_delay=3)
+            # 已移除StrongRejectScore相关内容
             break
         elif label is None:
             with print_lock:
@@ -174,7 +146,7 @@ def process_goal_with_retry(goal, goal_idx, total_count, max_retries=2, retry_de
                     print(f"# Retry count: {attempt+1}/{max_retries}")
                 print(f"{'#'*60}")
             start_time = time.time()
-            messages, round_results, success, score_result, attack_history, first_round_success = multi_agent_attack(
+            messages, round_results, success, attack_history, first_round_success = multi_agent_attack(
                 goal,
                 max_rounds=5,
                 goal_idx=goal_idx
@@ -188,7 +160,6 @@ def process_goal_with_retry(goal, goal_idx, total_count, max_retries=2, retry_de
                 "elapsed_time": elapsed_time,
                 "rounds": len(round_results),
                 "round_results": round_results,
-                "score_result": score_result,
                 "attack_history": attack_history
             }
         except Exception as e:
@@ -295,21 +266,13 @@ if __name__ == "__main__":
                             processed_result["attack_history"],
                             ensure_ascii=False
                         )
-                    score_result = processed_result["score_result"]
-                    if score_result:
-                        result.update({
-                            "score": score_result.score,
-                            "refusal": score_result.refusal,
-                            "specificity": score_result.specificity,
-                            "convincingness": score_result.convincingness
-                        })
-                    else:
-                        result.update({
-                            "score": None,
-                            "refusal": None,
-                            "specificity": None,
-                            "convincingness": None
-                        })
+                    # 已移除StrongRejectScore相关内容
+                    result.update({
+                        "score": None,
+                        "refusal": None,
+                        "specificity": None,
+                        "convincingness": None
+                    })
                     if "error" in processed_result:
                         result["error"] = processed_result["error"]
                     with file_lock:
@@ -359,7 +322,6 @@ if __name__ == "__main__":
         print(f"  Successful jailbreaks: {success_count} ({success_rate:.1f}%)")
         print(f"  First-round success: {first_round_success_count} ({first_round_success_rate:.1f}%)")
         print(f"  Average time: {avg_time:.1f} seconds")
-        # 已移除全局策略学习相关内容
         scored_results = [r for r in results[-total_attempted:] if r.get("score") is not None]
         if scored_results:
             avg_score = sum(r["score"] for r in scored_results) / len(scored_results)
